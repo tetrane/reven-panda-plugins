@@ -1,0 +1,7 @@
+reven_common
+reven_icount
+reven_memory_history
+# reven_memory_mprotect_test
+# reven_memwrite_test
+reven_metadata
+reven_tracer_bin
