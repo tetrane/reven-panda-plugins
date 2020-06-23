@@ -232,7 +232,7 @@ int insn_exec_callback(CPUState* cs, target_ptr_t)
 	return 0;
 }
 
-void before_interrupt(CPUState* /* cs*/, int /* intno */, bool /* is_int */, int /* error_code */, target_ptr_t /* next_eip */, bool is_hw)
+void before_interrupt(CPUState* cs, int /* intno */, bool /* is_int */, int /* error_code */, target_ptr_t /* next_eip */, bool is_hw)
 {
 	// hardware interrupts cannot happen in the middle of an instruction,
 	// so we know for sure the previous instruction for which before_interrupt has been called did start
@@ -240,6 +240,19 @@ void before_interrupt(CPUState* /* cs*/, int /* intno */, bool /* is_int */, int
 	// force the current instruction's start if not started already.
 	if (is_hw) {
 		execution_status.ensure_recording("hardware interrupt");
+	}
+
+	X86CPU* cpu = X86_CPU(cs);
+	CPUX86State *env = &cpu->env;
+
+	if (env->eip != cs->panda_guest_pc) {
+		// We know that we won't detect an instruction before the interrupt if its only doing read accesses
+		// We also know that during this callback:
+		//    - env->eip will contains the address of the next instruction to execute after the interrupt
+		//    - cs->panda_guest_pc will contains the address of the previously executed instruction
+		// So if they don't match that means that the previously executed instruction won't be resumed after the
+		// interrupt meaning that that the interrupt didn't occured during the instruction but after it.
+		execution_status.ensure_recording("interrupt after read-only instruction");
 	}
 
 	execution_status.before_interrupt();

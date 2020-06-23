@@ -50,10 +50,20 @@ void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */
 		}
 	}
 
-	if (packet_writer->is_event_started()) {
-		X86CPU* cpu = X86_CPU(cs);
-		CPUX86State *env = &cpu->env;
+	X86CPU* cpu = X86_CPU(cs);
+	CPUX86State *env = &cpu->env;
 
+	if (!packet_writer->is_event_started() && env->eip != cs->panda_guest_pc) {
+		// We know that we won't detect an instruction before the interrupt if its only doing read accesses
+		// We also know that during this callback:
+		//    - env->eip will contains the address of the next instruction to execute after the interrupt
+		//    - cs->panda_guest_pc will contains the address of the previously executed instruction
+		// So if they don't match that means that the previously executed instruction won't be resumed after the
+		// interrupt meaning that that the interrupt didn't occured during the instruction but after it.
+		packet_writer->start_event_instruction();
+	}
+
+	if (packet_writer->is_event_started()) {
 		// If the current instruction is fully executed, env->eip contains the next instruction's pc.
 		// If not, it contains the current instruction's pc.
 		// In both cases though, cs->panda_guest_pc contains the current instruction's pc.
