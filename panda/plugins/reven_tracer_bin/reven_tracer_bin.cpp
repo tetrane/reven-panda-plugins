@@ -25,6 +25,31 @@ static std::experimental::optional<PandaWriter> trace_writer;
 static std::experimental::optional<EventsSectionWriter> packet_writer;
 static std::experimental::optional<PandaCacheWriter> cache_writer;
 
+static std::experimental::optional<uint64_t> cached_pc;
+static std::experimental::optional<uint64_t> cached_cr2;
+
+bool should_use_cr2_cache(CPUState* cs) {
+	X86CPU* cpu = X86_CPU(cs);
+	CPUX86State *env = &cpu->env;
+
+	if (cached_cr2 && cached_cr2.value() != env->cr[2]) {
+		uint8_t buf[3] = {0};
+
+		// Check if it's a `mov cr2, reg` (0x0F 0X22 0XD[0-7])
+		if (
+			cached_pc
+			&& panda_virtual_memory_read(cs, cached_pc.value(), buf, 3) == 0
+			&& buf[0] == 0x0f && buf[1] == 0x22 && buf[2] >= 0xd0 && buf[2] <= 0xd7
+		) {
+			return false;
+		}
+
+		return true;
+	} else {
+		return false;
+	}
+}
+
 void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */, target_ptr_t /* next_eip */, bool is_hw)
 {
 	if (not packet_writer) {
@@ -64,6 +89,16 @@ void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */
 	}
 
 	if (packet_writer->is_event_started()) {
+		// Sometimes `cr2` will be modified one instruction before the pagefault instead of during the pagefault
+		// So we are just preventing `cr2` from changing in an instruction by restoring it to its previous value
+		uint64_t tmp_cr2 = env->cr[2];
+
+		if (should_use_cr2_cache(cs)) {
+			env->cr[2] = cached_cr2.value();
+		} else {
+			cached_cr2 = tmp_cr2;
+		}
+
 		// If the current instruction is fully executed, env->eip contains the next instruction's pc.
 		// If not, it contains the current instruction's pc.
 		// In both cases though, cs->panda_guest_pc contains the current instruction's pc.
@@ -80,13 +115,31 @@ void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */
 		packet_writer->finish_event();
 
 		cache_writer->new_context(cs, packet_writer->event_count(), packet_writer->stream_pos());
+
+		env->cr[2] = tmp_cr2;
 	}
+
+	cached_pc = cs->panda_guest_pc;
+	cached_cr2 = env->cr[2];
 
 	packet_writer->start_event_other(description);
 }
 
 int insn_exec_callback(CPUState* cs, target_ptr_t /* pc */)
 {
+	X86CPU* cpu = X86_CPU(cs);
+	CPUX86State *env = &cpu->env;
+
+	// Sometimes `cr2` will be modified one instruction before the pagefault instead of during the pagefault
+	// So we are just preventing `cr2` from changing in an instruction by restoring it to its previous value
+	uint64_t tmp_cr2 = env->cr[2];
+
+	if (should_use_cr2_cache(cs)) {
+		env->cr[2] = cached_cr2.value();
+	} else {
+		cached_cr2 = tmp_cr2;
+	}
+
 	static bool first_event = true;
 	if (first_event) {
 		first_event = false;
@@ -121,6 +174,9 @@ int insn_exec_callback(CPUState* cs, target_ptr_t /* pc */)
 
 		cache_writer->new_context(cs, packet_writer->event_count(), packet_writer->stream_pos());
 	}
+
+	cached_pc = cs->panda_guest_pc;
+	env->cr[2] = tmp_cr2;
 
 	if (packet_writer->event_count() != reven_icount()) {
 		uninit_plugin(NULL);
@@ -213,6 +269,14 @@ void uninit_plugin(void* /* self */)
 
 		X86CPU* cpu = X86_CPU(first_cpu);
 		CPUX86State *env = &cpu->env;
+
+		// Sometimes `cr2` will be modified one instruction before the pagefault instead of during the pagefault
+		// So we are just preventing `cr2` from changing in an instruction by restoring it to its previous value
+		if (should_use_cr2_cache(first_cpu)) {
+			env->cr[2] = cached_cr2.value();
+		} else {
+			cached_cr2 = env->cr[2];
+		}
 
 		// If the current instruction is fully executed, env->eip contains the next instruction's pc.
 		// If not, it contains the current instruction's pc.
