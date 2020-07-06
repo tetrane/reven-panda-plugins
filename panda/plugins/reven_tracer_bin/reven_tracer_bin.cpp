@@ -68,6 +68,8 @@ void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */
 		cs->panda_guest_pc = tmp_panda_guest_pc;
 
 		packet_writer->finish_event();
+
+		cache_writer->new_context(cs, packet_writer->event_count(), packet_writer->stream_pos());
 	}
 
 	packet_writer->start_event_other(description);
