@@ -19,17 +19,17 @@ extern "C" {
 bool init_plugin(void*);
 void uninit_plugin(void*);
 
-int insn_exec_callback(CPUState*, target_ulong);
-bool insn_translate_callback(CPUState*, target_ulong);
-int replay_after_dma_callback(CPUState*, uint32_t, uint8_t*, uint64_t, uint32_t);
+int insn_exec_callback(CPUState* env, target_ptr_t pc);
+bool insn_translate_callback(CPUState* env, target_ptr_t pc);
+void replay_after_dma_callback(CPUState* env, const uint8_t* buf, hwaddr addr, size_t size, bool is_write);
 
-int virt_mem_before_read_callback(CPUState*, target_ulong, target_ulong, target_ulong);
-int phys_mem_before_read_callback(CPUState*, target_ulong, target_ulong, target_ulong);
-int virt_mem_after_read_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
+void virt_mem_before_read_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size);
+void phys_mem_before_read_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size);
+void virt_mem_after_read_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size, uint8_t* buf);
 
-int virt_mem_before_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
-int phys_mem_before_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
-int virt_mem_after_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
+void virt_mem_before_write_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size, uint8_t* buf);
+void phys_mem_before_write_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size, uint8_t* buf);
+void virt_mem_after_write_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size, uint8_t* buf);
 }
 
 std::unique_ptr<DbWriter> memory_history_writer;
@@ -81,28 +81,25 @@ struct AccessInfoBuilder {
 
 std::experimental::optional<AccessInfoBuilder> access_builder;
 
-int virt_mem_before_read_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong size)
+void virt_mem_before_read_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t size)
 {
 	access_builder = AccessInfoBuilder({ addr, size }, false);
-	return 0;
 }
 
-int phys_mem_before_read_callback(CPUState* /* cpu */, target_ulong /* pc */, target_ulong addr, target_ulong size)
+void phys_mem_before_read_callback(CPUState* /* cpu */, target_ptr_t /* pc */, target_ptr_t addr, size_t size)
 {
 	if (not access_builder or access_builder->is_write) {
 		throw std::logic_error("Physical read access without previous virtual");
 	}
 
 	access_builder->add_phy({ addr, size });
-
-	return 0;
 }
 
-int virt_mem_after_read_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong size,
-                                 void* /* buf */)
+
+void virt_mem_after_read_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t size, uint8_t* /* buf */)
 {
 	if (not memory_history_writer || reven_exec_status() == REVEN_EXEC_STATUS_TRANSLATING) {
-		return 0;
+		return;
 	}
 
 	if (not access_builder or access_builder->is_write or access_builder->virt.addr != addr or
@@ -112,31 +109,26 @@ int virt_mem_after_read_callback(CPUState* /* cs */, target_ulong /* pc */, targ
 
 	access_builder->push_accesses(memory_history_writer.get());
 	access_builder = {};
-
-	return 0;
 }
 
-int virt_mem_before_write_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong size, void*)
+void virt_mem_before_write_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t size, uint8_t* /* buf */)
 {
 	access_builder = AccessInfoBuilder({ addr, size }, true);
-	return 0;
 }
 
-int phys_mem_before_write_callback(CPUState* /* cpu */, target_ulong /* pc */, target_ulong addr, target_ulong size, void* /* buf */)
+void phys_mem_before_write_callback(CPUState* /* cpu */, target_ptr_t /* pc */, target_ptr_t addr, size_t size, uint8_t* /* buf */)
 {
 	if (not access_builder or not access_builder->is_write) {
 		throw std::logic_error("Physical write access without previous virtual");
 	}
 
 	access_builder->add_phy({ addr, size });
-
-	return 0;
 }
 
-int virt_mem_after_write_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong size, void* /* buf */)
+void virt_mem_after_write_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t size, uint8_t* /* buf */)
 {
 	if (not memory_history_writer) {
-		return 0;
+		return;
 	}
 
 	if (not access_builder or not access_builder->is_write or access_builder->virt.addr != addr or
@@ -146,36 +138,32 @@ int virt_mem_after_write_callback(CPUState* /* cs */, target_ulong /* pc */, tar
 
 	access_builder->push_accesses(memory_history_writer.get());
 	access_builder = {};
-
-	return 0;
 }
 
-
-int replay_after_dma_callback(CPUState* cs, uint32_t is_write, uint8_t* /* src_buffer */, uint64_t dest_addr, uint32_t num_bytes)
+void replay_after_dma_callback(CPUState* cs, const uint8_t* /* src_buffer */, hwaddr dest_addr, size_t num_bytes, bool is_write)
 {
 	// Hack: if cs is null, we know the call is coming from a direct physical write from the MMU.
 	// We don't want to keep MMU accesses, because they have a huge impact on the database's size.
 	// TODO: actually add a proper callback for this case.
 	if (not memory_history_writer or not cs) {
-		return 0;
+		return;
 	}
 
+	const std::uint32_t narrowing_access_size = num_bytes;
 	if (is_write) {
-		memory_history_writer->push({reven_icount(), dest_addr, 0, num_bytes, false, Operation::Write});
+		memory_history_writer->push({reven_icount(), dest_addr, 0, narrowing_access_size, false, Operation::Write});
 	} else if (reven_exec_status() != REVEN_EXEC_STATUS_TRANSLATING) {
-		memory_history_writer->push({reven_icount(), dest_addr, 0, num_bytes, false, Operation::Read});
+		memory_history_writer->push({reven_icount(), dest_addr, 0, narrowing_access_size, false, Operation::Read});
 	}
-
-	return 0;
 }
 
-bool insn_translate_callback(CPUState* /* cs */, target_ulong /* pc */)
+bool insn_translate_callback(CPUState* /* cs */, target_ptr_t /* pc */)
 {
 	// Callback is necessary, otherwise panda crashes.
 	return true;
 }
 
-int insn_exec_callback(CPUState*, target_ulong)
+int insn_exec_callback(CPUState* /* cs */, target_ptr_t /* pc */)
 {
 	static bool first_event = true;
 	if (first_event) {

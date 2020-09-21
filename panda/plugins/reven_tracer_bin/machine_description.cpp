@@ -153,14 +153,14 @@ MachineDescription x64_machine_description(CPUState* cs)
 
 	const X86CPU* cpu = X86_CPU(cs);
 	auto state = get_cpu_state(cs);
-	desc.physical_address_size = cpu->phys_bits / 8 + (cpu->phys_bits % 8 ? 1 : 0);
+	desc.physical_address_size = cpu_get_phys_bits_cpu(cpu) / 8 + (cpu_get_phys_bits_cpu(cpu) % 8 ? 1 : 0);
 
 	desc.static_registers["cpuid_pat"] = value_to_buffer<std::uint8_t>(state->features[FEAT_1_EDX] & CPUID_PAT ? 1 : 0);
 	desc.static_registers["cpuid_pse36"] =
 	  value_to_buffer<std::uint8_t>(state->features[FEAT_1_EDX] & CPUID_PSE36 ? 1 : 0);
 	desc.static_registers["cpuid_1gb_pages"] =
 	  value_to_buffer<std::uint8_t>(state->features[FEAT_8000_0001_EDX] & CPUID_EXT2_PDPE1GB ? 1 : 0);
-	desc.static_registers["cpuid_max_phy_addr"] = value_to_buffer<std::uint8_t>(cpu->phys_bits);
+	desc.static_registers["cpuid_max_phy_addr"] = value_to_buffer<std::uint8_t>(cpu_get_phys_bits_cpu(cpu));
 
 	unsigned char linear_size;
 	if (state->features[FEAT_7_0_ECX] & CPUID_7_0_ECX_LA57) {

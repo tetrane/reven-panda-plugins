@@ -25,12 +25,12 @@ void uninit_plugin(void*);
 extern int nb_panda_plugins;
 extern panda_plugin panda_plugins[];
 
-int insn_exec_callback(CPUState*, target_ulong);
-bool insn_translate_callback(CPUState*, target_ulong);
-int before_interrupt(CPUState *env,  int intno, int is_int, int error_code, target_ulong next_eip, int is_hw);
-int replay_after_dma_callback(CPUState*, uint32_t, uint8_t*, uint64_t, uint32_t);
-int phys_mem_after_read_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
-int phys_mem_after_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
+int insn_exec_callback(CPUState* env, target_ptr_t pc);
+bool insn_translate_callback(CPUState* env, target_ptr_t pc);
+void before_interrupt(CPUState* env, int intno, bool is_int, int error_code, target_ptr_t next_eip, bool is_hw);
+void replay_after_dma_callback(CPUState* env, const uint8_t* buf, hwaddr addr, size_t size, bool is_write);
+void phys_mem_after_read_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size, uint8_t* buf);
+void phys_mem_after_write_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size, uint8_t* buf);
 
 namespace {
 
@@ -39,7 +39,7 @@ std::experimental::optional<std::uint64_t> max_icount;
 void unload_plugins()
 {
 	for (int i = 0; i < nb_panda_plugins; ++i) {
-		if (0 != strcmp(panda_plugins[i].name, "panda_reven_icount.so")) {
+		if (0 != strcmp(panda_plugins[i].name, "reven_icount")) {
 			panda_do_unload_plugin(i);
 		}
 	}
@@ -199,43 +199,40 @@ bool reven_exec_rep_ongoing(void)
 	return execution_status.is_rep_ongoing();
 }
 
-int phys_mem_after_read_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*)
+void phys_mem_after_read_callback(CPUState*, target_ptr_t, target_ptr_t, size_t, uint8_t*)
 {
 	// Do nothing
-	return 0;
 }
 
-int phys_mem_after_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*)
+void phys_mem_after_write_callback(CPUState*, target_ptr_t, target_ptr_t, size_t, uint8_t*)
 {
 	if (execution_status.status() == REVEN_EXEC_STATUS_TRANSLATING)
 		throw std::logic_error("Virtual memory writes should not happen during translation!");
 
 	execution_status.ensure_recording("mem write");
-	return 0;
 }
 
-int replay_after_dma_callback(CPUState*, uint32_t is_write, uint8_t*, uint64_t, uint32_t)
+void replay_after_dma_callback(CPUState*, const uint8_t*, hwaddr, size_t, bool is_write)
 {
 	if (is_write) {
 		execution_status.ensure_recording("dma write");
 	}
-	return 0;
 }
 
-bool insn_translate_callback(CPUState*, target_ulong)
+bool insn_translate_callback(CPUState*, target_ptr_t)
 {
 	execution_status.before_translation();
 	return true;
 }
 
-int insn_exec_callback(CPUState* cs, target_ulong)
+int insn_exec_callback(CPUState* cs, target_ptr_t)
 {
 	CPUX86State* cpu = &X86_CPU(cs)->env;
 	execution_status.before_new_instruction(cs->panda_guest_pc, cpu->regs[R_ECX]);
 	return 0;
 }
 
-int before_interrupt(CPUState* /* cs*/, int /* intno */, int /* is_int */, int /* error_code */, target_ulong /* next_eip */, int is_hw)
+void before_interrupt(CPUState* /* cs*/, int /* intno */, bool /* is_int */, int /* error_code */, target_ptr_t /* next_eip */, bool is_hw)
 {
 	// hardware interrupts cannot happen in the middle of an instruction,
 	// so we know for sure the previous instruction for which before_interrupt has been called did start
@@ -246,7 +243,6 @@ int before_interrupt(CPUState* /* cs*/, int /* intno */, int /* is_int */, int /
 	}
 
 	execution_status.before_interrupt();
-	return 0;
 }
 
 void on_sigabrt(int /* signum */) {

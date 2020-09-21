@@ -9,6 +9,8 @@
 #include "machine_description.h"
 #include "custom_cpu_context.h"
 
+#include "cpu_help.h"
+
 namespace {
 
 #if defined(TARGET_X86_64)
@@ -163,7 +165,7 @@ void save_initial_registers(CPUState* cs, InitialRegistersSectionWriter& writer)
 	comparison_msr_apicbase = read_msr<MSR_IA32_APICBASE>(state);
 
 	// CR8 is computed, not stored
-	comparison_cr8 = cpu_get_apic_tpr(cpu->apic_state);
+	comparison_cr8 = cpu_get_apic_tpr_cpu(cpu);
 	write_reg(writer, r_cr8, 8, comparison_cr8);
 
     #define REGISTER(register, size)
@@ -259,7 +261,7 @@ void save_diff_registers(CPUState* cs, EventsSectionWriter& writer)
 	}
 
 	// CR8 is computed, not stored
-	std::uint64_t new_cr8 = cpu_get_apic_tpr(cpu->apic_state);
+	std::uint64_t new_cr8 = cpu_get_apic_tpr_cpu(cpu);
 	if (new_cr8 != comparison_cr8) {
 		comparison_cr8 = new_cr8;
 		writer.write_register(reg_id(r_cr8), reinterpret_cast<std::uint8_t*>(&new_cr8), 8);

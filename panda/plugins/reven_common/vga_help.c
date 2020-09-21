@@ -1,9 +1,17 @@
 #include "vga_help.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <qemu/osdep.h>
 #include <hw/pci/pci.h>
 #include <ui/console.h>
 #include <hw/display/vga_int.h>
+
+#ifdef __cplusplus
+}
+#endif
 
 // Keep this file a C file, so access to QEMU structures is assured to be compatible.
 // (see also custom_cpu_context.h)

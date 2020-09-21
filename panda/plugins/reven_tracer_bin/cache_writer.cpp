@@ -79,7 +79,7 @@ void PandaCacheWriter::new_context(CPUState* cs, std::uint64_t context_id, std::
 	auto fpu_tag = compute_fpu_tags(cs);
 	cache_points_writer_.write_register(reg_id(r_x87tags), reinterpret_cast<const std::uint8_t*>(&fpu_tag), 2);
 
-	std::uint64_t cr8 = cpu_get_apic_tpr(cpu->apic_state);
+	std::uint64_t cr8 = cpu_get_apic_tpr_cpu(cpu);
 	cache_points_writer_.write_register(reg_id(r_cr8), reinterpret_cast<const std::uint8_t*>(&cr8), 8);
 
 	std::uint64_t msr_value;

@@ -14,9 +14,9 @@ LIBS+=-lmagic -lrvnbinresource -lrvnjsonresource -lrvnsqlite -lsqlite3 -lboost_f
 QEMU_CXXFLAGS+=-std=c++14
 
 PLUGIN_HEADERS=$(PLUGIN_OBJ_DIR)/trace_writer.h $(PLUGIN_OBJ_DIR)/machine_description.h \
-	$(PLUGIN_OBJ_DIR)/cache_writer.h $(PLUGIN_OBJ_DIR)/../reven_common/vga_help.h
+	$(PLUGIN_OBJ_DIR)/cache_writer.h $(PLUGIN_OBJ_DIR)/cpu_help.h $(PLUGIN_OBJ_DIR)/../reven_common/vga_help.h
 PLUGIN_OBJFILES=$(PLUGIN_OBJ_DIR)/trace_writer.o $(PLUGIN_OBJ_DIR)/machine_description.o  \
-	$(PLUGIN_OBJ_DIR)/cache_writer.o $(PLUGIN_OBJ_DIR)/../reven_common/vga_help.o
+	$(PLUGIN_OBJ_DIR)/cache_writer.o $(PLUGIN_OBJ_DIR)/cpu_help.o $(PLUGIN_OBJ_DIR)/../reven_common/vga_help.o
 
 # The main rule for your plugin. List all object-file dependencies.
 $(PLUGIN_TARGET_DIR)/panda_$(PLUGIN_NAME).so: \

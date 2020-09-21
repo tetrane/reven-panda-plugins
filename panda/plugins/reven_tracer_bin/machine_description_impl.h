@@ -2,6 +2,7 @@
 #include <panda/plugin_plugin.h>
 
 #include "custom_cpu_context.h"
+#include "cpu_help.h"
 
 // This method is a copy/paste of void helper_rdmsr(CPUX86State *env) from misc_helper.c
 // Notable modifications, useful for maintenance:
@@ -29,7 +30,7 @@ std::uint64_t read_msr(CPUX86State_CPPversion* env)
         val = env->sysenter_eip;
         break;
     case MSR_IA32_APICBASE:
-        val = cpu_get_apic_base(x86_env_get_cpu(reinterpret_cast<CPUX86State*>(env))->apic_state);
+        val = cpu_get_apic_base_cpu(x86_env_get_cpu(reinterpret_cast<CPUX86State*>(env)));
         break;
     case MSR_EFER:
         val = env->efer;

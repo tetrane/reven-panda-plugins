@@ -14,22 +14,22 @@ extern "C" {
 bool init_plugin(void*);
 void uninit_plugin(void*);
 
-int insn_exec_callback(CPUState*, target_ulong);
-int phys_mem_after_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
-int replay_after_dma_callback(CPUState*, uint32_t, uint8_t*, uint64_t, uint32_t);
-int before_interrupt(CPUState *cs,  int intno, int is_int, int error_code, target_ulong next_eip, int is_hw);
-bool insn_translate_callback(CPUState*, target_ulong);
+int insn_exec_callback(CPUState* env, target_ptr_t pc);
+void phys_mem_after_write_callback(CPUState* env, target_ptr_t pc, target_ptr_t addr, size_t size, uint8_t* buf);
+void replay_after_dma_callback(CPUState* env, const uint8_t* buf, hwaddr addr, size_t size, bool is_write);
+void before_interrupt(CPUState* env, int intno, bool is_int, int error_code, target_ptr_t next_eip, bool is_hw);
+bool insn_translate_callback(CPUState* env, target_ptr_t pc);
 }
 
 static std::experimental::optional<PandaWriter> trace_writer;
 static std::experimental::optional<EventsSectionWriter> packet_writer;
 static std::experimental::optional<PandaCacheWriter> cache_writer;
 
-int before_interrupt(CPUState *cs, int intno, int is_int, int /* error_code */, target_ulong /* next_eip */, int is_hw)
+void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */, target_ptr_t /* next_eip */, bool is_hw)
 {
 	if (not packet_writer) {
 		// Trace writer not initialized, this event will be in the initial context, skip it.
-		return 0;
+		return;
 	}
 
 	std::string description;
@@ -71,11 +71,9 @@ int before_interrupt(CPUState *cs, int intno, int is_int, int /* error_code */, 
 	}
 
 	packet_writer->start_event_other(description);
-
-	return 0; // unused
 }
 
-int insn_exec_callback(CPUState* cs, target_ulong /* pc */)
+int insn_exec_callback(CPUState* cs, target_ptr_t /* pc */)
 {
 	static bool first_event = true;
 	if (first_event) {
@@ -120,24 +118,22 @@ int insn_exec_callback(CPUState* cs, target_ulong /* pc */)
 	return 0;
 }
 
-int phys_mem_after_write_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong size, void* buf)
+void phys_mem_after_write_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t size, uint8_t* buf)
 {
 	if (not packet_writer)
-		return 0;
+		return;
 
 	if (not packet_writer->is_event_started())
 		packet_writer->start_event_instruction();
 
     packet_writer->write_memory(addr, reinterpret_cast<const std::uint8_t*>(buf), size);
     cache_writer->mark_memory_dirty(addr, size);
-
-    return 0;
 }
 
-int replay_after_dma_callback(CPUState* /* cs */, uint32_t is_write, uint8_t* src_addr, uint64_t dest_addr, uint32_t num_bytes)
+void replay_after_dma_callback(CPUState* /* cs */, const uint8_t* src_addr, hwaddr dest_addr, size_t num_bytes, bool is_write)
 {
 	if (not packet_writer)
-		return 0;
+		return;
 
 	if (is_write) {
 		if (not packet_writer->is_event_started())
@@ -145,11 +141,9 @@ int replay_after_dma_callback(CPUState* /* cs */, uint32_t is_write, uint8_t* sr
 		packet_writer->write_memory(dest_addr, src_addr, num_bytes);
 		cache_writer->mark_memory_dirty(dest_addr, num_bytes);
 	}
-
-	return 0;
 }
 
-bool insn_translate_callback(CPUState* /* cs */, target_ulong /* pc */)
+bool insn_translate_callback(CPUState* /* cs */, target_ptr_t /* pc */)
 {
 	// Callback is necessary, otherwise panda crashes.
 	return true;
