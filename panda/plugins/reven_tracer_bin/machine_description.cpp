@@ -1,13 +1,14 @@
 #include "machine_description.h"
 
 #include <cstdint>
+#include <iostream>
+
+#include <boost/icl/interval_set.hpp>
 
 #include <panda/plugin.h>
 #include <panda/plugin_plugin.h>
 
 #include "custom_cpu_context.h"
-
-#include "../reven_common/vga_help.h"
 
 namespace {
 
@@ -88,6 +89,63 @@ void initialize_register_maps()
 	#undef REGISTER_CTX
 	#undef REGISTER_MSR
 }
+
+void get_all_panda_memory_regions(boost::icl::interval_set<std::uint64_t>& region_intervals, MemoryRegion *region) {
+	auto mr_size = int128_getlo(region->size);
+	// The memory regions size is working like that:
+	//    - If the low 64 bits are 0 and the high 64 bits are equal to 1 it means that the region is taking the entire address space
+	//    - If the low 64 bits aren't 0, the high 64 bits is 0 and the low 64 bits are the size of the region
+	// We can ignore the region taking the entire address space as they are always split in subregions
+	if (!int128_gethi(region->size) && mr_size > 0) {
+		// The address is relative to the parent region.
+		// To compute the real address of the region we can just add it to all its parent addresses.
+		hwaddr mr_addr = 0;
+		for (MemoryRegion *mr = region; mr; mr = mr->container) {
+			mr_addr += mr->addr;
+		}
+
+		region_intervals.insert({mr_addr, mr_addr + mr_size});
+	}
+
+	MemoryRegion *submr;
+	QTAILQ_FOREACH(submr, &region->subregions, subregions_link) {
+		get_all_panda_memory_regions(region_intervals, submr);
+	}
+}
+
+std::vector<MachineDescription::MemoryRegion> compute_panda_memory_regions()
+{
+	boost::icl::interval_set<std::uint64_t> region_intervals = {};
+
+	get_all_panda_memory_regions(region_intervals, get_system_memory());
+	get_all_panda_memory_regions(region_intervals, get_system_io());
+
+	// rvnbintrace won't be happy with regions with size < TARGET_PAGE_SIZE
+	for (auto it = region_intervals.begin(); it != region_intervals.end(); it++) {
+		if (it->upper() - it->lower() < TARGET_PAGE_SIZE) {
+			// When a region is smaller than TARGET_PAGE_SIZE we should be sure that it's a MMIO region before
+			// resizing it to TARGET_PAGE_SIZE as we don't want to go out-of-bound when reading the RAM.
+			uint8_t buf[1] = {0};
+			if (panda_physical_memory_rw(it->lower(), buf, 1, false) == 0) {
+				std::cout
+					<< "Warning: Memory region (0x"
+					<< std::hex << it->lower() << " -> 0x" << it->upper()
+					<< ") is smaller than a page and is not a MMIO region." << std::endl;
+			}
+
+			region_intervals.insert({it->lower(), it->lower() + TARGET_PAGE_SIZE});
+		}
+	}
+
+	std::vector<MachineDescription::MemoryRegion> regions = {};
+	for (auto it = region_intervals.begin(); it != region_intervals.end(); it++) {
+		regions.push_back({it->lower(), it->upper() - it->lower()});
+	}
+
+	return regions;
+}
+
+
 
 MachineDescription x64_machine_description(CPUState* cs)
 {
@@ -171,15 +229,7 @@ MachineDescription x64_machine_description(CPUState* cs)
 	}
 	desc.static_registers["cpuid_max_lin_addr"] = value_to_buffer<std::uint8_t>(linear_size);
 
-	// Memory regions:
-	// First, RAM
-	desc.memory_regions.push_back({ 0, ram_size });
-
-	// Then VGA framebuffer
-	VGAInfo info;
-	if (get_vga_info(&info)) {
-		desc.memory_regions.push_back({ info.fb_address, info.fb_size });
-	}
+	desc.memory_regions = compute_panda_memory_regions();
 
 	return desc;
 }

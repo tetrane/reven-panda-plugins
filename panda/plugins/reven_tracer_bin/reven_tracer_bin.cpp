@@ -194,8 +194,8 @@ void phys_mem_after_write_callback(CPUState* /* cs */, target_ptr_t /* pc */, ta
 	if (not packet_writer->is_event_started())
 		packet_writer->start_event_instruction();
 
-    packet_writer->write_memory(addr, reinterpret_cast<const std::uint8_t*>(buf), size);
-    cache_writer->mark_memory_dirty(addr, size);
+	packet_writer->write_memory(addr, reinterpret_cast<const std::uint8_t*>(buf), size);
+	cache_writer->mark_memory_dirty(addr, size);
 }
 
 void replay_after_dma_callback(CPUState* /* cs */, const uint8_t* src_addr, hwaddr dest_addr, size_t num_bytes, bool is_write)
