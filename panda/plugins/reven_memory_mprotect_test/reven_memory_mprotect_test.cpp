@@ -44,16 +44,16 @@ bool init_plugin(void*);
 void uninit_plugin(void*);
 }
 
-int insn_exec_callback(CPUState*, target_ulong);
-int phys_mem_before_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
-int phys_mem_before_read_callback(CPUState*, target_ulong, target_ulong, target_ulong);
-int phys_mem_after_write_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
-int phys_mem_after_read_callback(CPUState*, target_ulong, target_ulong, target_ulong, void*);
-int replay_after_dma_callback(CPUState*, uint32_t, uint8_t*, uint64_t, uint32_t);
-bool insn_translate_callback(CPUState*, target_ulong);
-int replay_before_block_exec(CPUState *env, TranslationBlock *tb);
-int replay_after_block_exec(CPUState *env, TranslationBlock *tb);
-int replay_before_block_translate(CPUState *env, target_ulong pc);
+int insn_exec_callback(CPUState*, target_ptr_t);
+void phys_mem_before_write_callback(CPUState*, target_ptr_t, target_ptr_t, size_t, uint8_t*);
+void phys_mem_before_read_callback(CPUState*, target_ptr_t, target_ptr_t, size_t);
+void phys_mem_after_write_callback(CPUState*, target_ptr_t, target_ptr_t, size_t, uint8_t*);
+void phys_mem_after_read_callback(CPUState*, target_ptr_t, target_ptr_t, size_t, uint8_t*);
+void replay_after_dma_callback(CPUState*, const uint8_t*, hwaddr, size_t, bool);
+bool insn_translate_callback(CPUState*, target_ptr_t);
+void replay_before_block_exec(CPUState *env, TranslationBlock *tb);
+void replay_after_block_exec(CPUState *env, TranslationBlock *tb, uint8_t);
+void replay_before_block_translate(CPUState *env, target_ptr_t pc);
 
 struct RecordedAccess {
 	std::uint64_t address;
@@ -251,7 +251,7 @@ void sig_handler(int signum, siginfo_t *info, void *ptr)
 	}
 }
 
-int insn_exec_callback(CPUState* /* cs */, target_ulong /* pc */)
+int insn_exec_callback(CPUState* /* cs */, target_ptr_t /* pc */)
 {
 	static std::uint64_t context_counter = 0;
 	if (context_counter == 0) {
@@ -299,78 +299,78 @@ int insn_exec_callback(CPUState* /* cs */, target_ulong /* pc */)
 	return 0;
 }
 
-int phys_mem_before_write_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong size, void* /* buf */)
+void phys_mem_before_write_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t size, uint8_t* /* buf */)
 {
 	if (not record_real_accesses or not is_address_in_ranges(addr)) {
-		return 0;
+		return;
 	}
 
 	panda_accesses.push_back({ addr, size, {{ 0 }}, true, false });
-    return 0;
+	return;
 }
 
-int phys_mem_before_read_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong size)
+void phys_mem_before_read_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t size)
 {
 	if (not record_real_accesses or not is_address_in_ranges(addr)) {
-		return 0;
+		return;
 	}
 
 	panda_accesses.push_back({ addr, size, {{ 0 }}, false, false });
-    return 0;
+	return;
 }
 
-int phys_mem_after_write_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong /* size */, void* /* buf */)
+void phys_mem_after_write_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t /* size */, uint8_t* /* buf */)
 {
 	if (not record_real_accesses or not is_address_in_ranges(addr)) {
-		return 0;
+		return;
 	}
 
 	panda_accesses.back().has_succeeded = true;
-    return 0;
+	return;
 }
 
-int phys_mem_after_read_callback(CPUState* /* cs */, target_ulong /* pc */, target_ulong addr, target_ulong /* size */, void* /* buf */)
+void phys_mem_after_read_callback(CPUState* /* cs */, target_ptr_t /* pc */, target_ptr_t addr, size_t /* size */, uint8_t* /* buf */)
 {
 	if (not record_real_accesses or not is_address_in_ranges(addr)) {
-		return 0;
+		return;
 	}
 
 	panda_accesses.back().has_succeeded = true;
-    return 0;
+	return;
 }
 
-int replay_after_dma_callback(CPUState* /* cs */, uint32_t is_write, uint8_t* /* src_addr */, uint64_t dest_addr, uint32_t num_bytes)
+void replay_after_dma_callback(CPUState* /* cs */, const uint8_t* /* buf */, hwaddr dest_addr, size_t num_bytes, bool is_write)
 {
 	if (not record_real_accesses or not is_address_in_ranges(dest_addr)) {
-		return 0;
+		return;
 	}
 
-	panda_accesses.push_back({ dest_addr, num_bytes, {{ 0 }}, static_cast<bool>(is_write), true });
-	return 0;
+	panda_accesses.push_back({ dest_addr, num_bytes, {{ 0 }}, is_write, true });
+	return;
 }
 
-bool insn_translate_callback(CPUState* /* cs */, target_ulong /* pc */)
+bool insn_translate_callback(CPUState* /* cs */, target_ptr_t /* pc */)
 {
 	record_real_accesses = false;
 	return true;
 }
 
-int replay_before_block_exec(CPUState* /* cs */, TranslationBlock* /* tb */)
+void replay_before_block_exec(CPUState* /* cs */, TranslationBlock* /* tb */)
 {
 	record_real_accesses = true;
-	return 0;
+	return;
 }
 
-int replay_after_block_exec(CPUState* /* cs */, TranslationBlock* /* tb */)
+void replay_after_block_exec(CPUState* /* cs */, TranslationBlock* /* tb */, uint8_t /* exitCode */)
 {
 	record_real_accesses = false;
-	return 0;
+	return;
 }
 
-int replay_before_block_translate(CPUState* /* cs */, target_ulong /* pc */)
+void replay_before_block_translate(CPUState* /* cs */, target_ptr_t /* pc */)
 {
 	record_real_accesses = false;
-	return 0;
+	return;
 }
 
 bool init_plugin(void* self)
