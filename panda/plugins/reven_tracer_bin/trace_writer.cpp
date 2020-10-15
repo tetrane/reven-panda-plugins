@@ -115,10 +115,10 @@ void save_initial_memory(CPUState* /* cs */, const MachineDescription& machine, 
 			auto size = std::min<std::size_t>(TARGET_PAGE_SIZE, region.start + region.size - addr);
 			auto res = panda_physical_memory_rw(addr, mem_buf, size, 0);
 
-			if (res == -1) { // I/O. Just fill page with zeroes.
-				writer.write(zero_buf, size);
-			} else {
+			if (res == 0) {
 				writer.write(mem_buf, size);
+			} else { // I/O. Just fill page with zeroes.
+				writer.write(zero_buf, size);
 			}
 		}
 	}

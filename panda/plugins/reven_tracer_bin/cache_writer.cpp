@@ -99,11 +99,8 @@ void PandaCacheWriter::new_context(CPUState* cs, std::uint64_t context_id, std::
 	for (auto page : dirty_pages_) {
 		auto res = panda_physical_memory_rw(page, memory_buffer_.data(), header().page_size, 0);
 
-		if (res != -1) {
+		if (res == 0) { // Not I/O
 			cache_points_writer_.write_memory_page(page, memory_buffer_.data());
-		} else {
-			std::cout << "Couldn't read physical memory " << page << "! Aborting." << std::endl;
-			exit(1);
 		}
 	}
 	dirty_pages_.clear();
