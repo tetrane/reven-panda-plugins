@@ -53,7 +53,7 @@ void PandaCacheWriter::new_context(CPUState* cs, std::uint64_t context_id, std::
 
 #if defined(TARGET_X86_64)
 	auto state = get_cpu_state(cs);
-	X86CPU* cpu = X86_CPU(cs);
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 
 	cache_points_writer_.write_register(reg_id(r_rip), reinterpret_cast<const std::uint8_t*>(&cs->panda_guest_pc), 8);
 

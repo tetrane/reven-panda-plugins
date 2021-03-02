@@ -129,7 +129,7 @@ void save_initial_registers(CPUState* cs, InitialRegistersSectionWriter& writer)
 {
 #if defined(TARGET_X86_64)
 	auto state = get_cpu_state(cs);
-	X86CPU* cpu = X86_CPU(cs);
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 
 	comparison_state = *state;
 
@@ -149,7 +149,7 @@ void save_initial_registers(CPUState* cs, InitialRegistersSectionWriter& writer)
 	comparison_state.regs[R_ESP] = state->regs[R_ESP];
 
 	// Eflags needs special recomputation
-	target_ulong eflags = cpu_compute_eflags(&X86_CPU(cs)->env);
+	target_ulong eflags = cpu_compute_eflags(&reinterpret_cast<X86CPU*>(cs)->env);
 	comparison_state.eflags = eflags;
 	write_reg(writer, r_eflags, 4, eflags);
 
@@ -185,7 +185,7 @@ void save_diff_registers(CPUState* cs, EventsSectionWriter& writer)
 {
 #if defined(TARGET_X86_64)
 	auto state = get_cpu_state(cs);
-	X86CPU* cpu = X86_CPU(cs);
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 
 	if ((cs->panda_guest_pc - comparison_rip) <= 15 and cs->panda_guest_pc != comparison_rip) {
 		writer.write_register_action(

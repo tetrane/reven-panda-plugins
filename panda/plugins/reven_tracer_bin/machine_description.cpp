@@ -209,7 +209,7 @@ MachineDescription x64_machine_description(CPUState* cs)
 		desc.registers.insert(std::make_pair(next_id++, MachineDescription::Register({reg_size(reg), reg_name(reg)})));
 	}
 
-	const X86CPU* cpu = X86_CPU(cs);
+	const X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 	auto state = get_cpu_state(cs);
 	desc.physical_address_size = cpu_get_phys_bits_cpu(cpu) / 8 + (cpu_get_phys_bits_cpu(cpu) % 8 ? 1 : 0);
 

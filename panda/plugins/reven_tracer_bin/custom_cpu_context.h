@@ -2,7 +2,7 @@
 
 struct CPUX86State_CPPversion;
 
-inline CPUX86State_CPPversion* get_cpu_state(CPUState* cs) { return reinterpret_cast<CPUX86State_CPPversion*>(&X86_CPU(cs)->env); }
+inline CPUX86State_CPPversion* get_cpu_state(CPUState* cs) { return reinterpret_cast<CPUX86State_CPPversion*>(&reinterpret_cast<X86CPU*>(cs)->env); }
 
 // Redifinition of CPUX86State without C++-incompatible C empty types.
 struct CPUX86State_CPPversion {

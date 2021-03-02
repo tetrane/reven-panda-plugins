@@ -29,7 +29,7 @@ static std::experimental::optional<uint64_t> cached_pc;
 static std::experimental::optional<uint64_t> cached_cr2;
 
 bool should_use_cr2_cache(CPUState* cs) {
-	X86CPU* cpu = X86_CPU(cs);
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 	CPUX86State *env = &cpu->env;
 
 	if (cached_cr2 && cached_cr2.value() != env->cr[2]) {
@@ -75,7 +75,7 @@ void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */
 		}
 	}
 
-	X86CPU* cpu = X86_CPU(cs);
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 	CPUX86State *env = &cpu->env;
 
 	if (!packet_writer->is_event_started() && env->eip != cs->panda_guest_pc) {
@@ -127,7 +127,7 @@ void before_interrupt(CPUState *cs, int intno, bool is_int, int /* error_code */
 
 int insn_exec_callback(CPUState* cs, target_ptr_t /* pc */)
 {
-	X86CPU* cpu = X86_CPU(cs);
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 	CPUX86State *env = &cpu->env;
 
 	// Sometimes `cr2` will be modified one instruction before the pagefault instead of during the pagefault
@@ -267,7 +267,7 @@ void uninit_plugin(void* /* self */)
 		if (not packet_writer->is_event_started())
 			packet_writer->start_event_instruction();
 
-		X86CPU* cpu = X86_CPU(first_cpu);
+		X86CPU* cpu = reinterpret_cast<X86CPU*>(first_cpu);
 		CPUX86State *env = &cpu->env;
 
 		// Sometimes `cr2` will be modified one instruction before the pagefault instead of during the pagefault

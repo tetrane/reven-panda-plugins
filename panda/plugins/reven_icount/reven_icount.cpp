@@ -227,7 +227,7 @@ bool insn_translate_callback(CPUState*, target_ptr_t)
 
 int insn_exec_callback(CPUState* cs, target_ptr_t)
 {
-	CPUX86State* cpu = &X86_CPU(cs)->env;
+	CPUX86State* cpu = &reinterpret_cast<X86CPU*>(cs)->env;
 	execution_status.before_new_instruction(cs->panda_guest_pc, cpu->regs[R_ECX]);
 	return 0;
 }
@@ -242,7 +242,7 @@ void before_interrupt(CPUState* cs, int /* intno */, bool /* is_int */, int /* e
 		execution_status.ensure_recording("hardware interrupt");
 	}
 
-	X86CPU* cpu = X86_CPU(cs);
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
 	CPUX86State *env = &cpu->env;
 
 	if (env->eip != cs->panda_guest_pc) {
