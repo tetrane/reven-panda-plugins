@@ -28,7 +28,8 @@ void get_vga_state_from_device(__attribute__((unused)) PCIBus *bus, PCIDevice *d
 
 int get_vga_info(VGAInfo* info)
 {
-	uint32_t dummy;
+	uint32_t dummy = 0;
+	uint32_t offset_vram = 0;
 
 	PCIBus* bus = pci_find_primary_bus();
 	VGACommonState* s = NULL;
@@ -42,7 +43,10 @@ int get_vga_info(VGAInfo* info)
 	s->get_resolution(s, &info->width, &info->height);
 	info->bytes_per_pixel = (s->get_bpp(s) + 7) / 8;
 	info->is_graphic_mode = info->bytes_per_pixel != 0;
-	s->get_offsets(s, &info->line_byte_size, &dummy, &dummy);
+	s->get_offsets(s, &info->line_byte_size, &offset_vram, &dummy);
+
+	// Handle offset framebuffer: use the CRT offset, stored /4 (cf http://www.osdever.net/FreeVGA/vga/crtcreg.htm#0D)
+	info->fb_address += offset_vram * 4;
 
 	return true;
 }
