@@ -22,9 +22,10 @@ void uninit_plugin(void*);
 void before_block_exec(CPUState* cpu, TranslationBlock* tb);
 }
 
-using namespace reven::block;
+using ExecutionMode = reven::block::ExecutionMode;
+using namespace reven::block::writer;
 
-static std::experimental::optional<reven::block::Writer> writer;
+static std::experimental::optional<Writer> writer;
 
 void before_block_exec(CPUState* cpu, TranslationBlock* tb)
 {
@@ -65,7 +66,7 @@ void before_block_exec(CPUState* cpu, TranslationBlock* tb)
 		transition_count = reven_icount();
 	}
 
-	writer->add_block(transition_count + 1, block, Span{data_buffer.size(), data_buffer.data()});
+	writer->add_block(transition_count + 1, block, reven::block::Span{data_buffer.size(), data_buffer.data()});
 }
 
 void before_interrupt(CPUState* /*cpu*/, int /*intno*/, bool /*is_int*/, int /*error_code*/, target_ptr_t /*next_eip*/, bool /*is_hw*/)
