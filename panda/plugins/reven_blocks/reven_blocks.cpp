@@ -117,6 +117,8 @@ void uninit_plugin(void*)
 {
 	// Add the past-the-end icount, so that even the last instruction
 	// remains lower than the last executed block entry
-	writer->finalize_execution(reven_icount() + 1);
+	if (reven_exec_status() != REVEN_EXEC_STATUS_NOT_STARTED) {
+		writer->finalize_execution(reven_icount() + 1);
+	}
 	writer = std::experimental::nullopt;
 }
