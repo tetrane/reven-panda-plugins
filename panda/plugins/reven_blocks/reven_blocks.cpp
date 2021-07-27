@@ -69,13 +69,47 @@ void before_block_exec(CPUState* cpu, TranslationBlock* tb)
 	writer->add_block(transition_count + 1, block, reven::block::Span{data_buffer.size(), data_buffer.data()});
 }
 
-void before_interrupt(CPUState* /*cpu*/, int /*intno*/, bool /*is_int*/, int /*error_code*/, target_ptr_t /*next_eip*/, bool /*is_hw*/)
+void before_interrupt(CPUState* cs, int intno, bool /*is_int*/, int /*error_code*/, target_ptr_t /*next_eip*/, bool is_hw)
 {
 	if (reven_exec_status() == REVEN_EXEC_STATUS_NOT_STARTED) {
 		return;
 	}
 
-	writer->add_interrupt(reven_icount());
+	Interrupt interrupt;
+	interrupt.number = intno;
+
+	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
+	CPUX86State *env = &cpu->env;
+
+	// Per reven-bin-trace, we know that during this callback:
+	//    - env->eip will contains the address of the next instruction to execute after the interrupt
+	//    - cs->panda_guest_pc will contains the address of the previously executed instruction
+	// If the instruction to be executed is the same as the instruction previously executed,
+	// it means that we were interrupted before the instruction was executed.
+
+	// FIXME: this discriminates correctly between code and data PF, but in reven-bin-trace, the equivalent returns true
+	// for hw interrupt, which it doesn't here.
+	// A stop-gap measure to have the same behavior as REVEN's (probably ...) would be to check for the interrupt number
+	// 14.
+	interrupt.has_related_instruction = env->eip == cs->panda_guest_pc;
+
+	// Experimentally this seems to be giving the same value as reven-bin-trace, although I (@snoopy) can't offer an
+	// explanation of why that is.
+	// Fully tested on bksod scenario.
+	interrupt.pc = env->eip;
+
+	// Experimentally verified to be in sync with the trace on a scenario executing a 32b binary on a 64b OS.
+	if (env->hflags & HF_CS64_MASK) {
+		interrupt.mode = ExecutionMode::x86_64_bits;
+	} else if (env->hflags & HF_CS32_MASK) {
+		interrupt.mode = ExecutionMode::x86_32_bits;
+	} else {
+		interrupt.mode = ExecutionMode::x86_16_bits;
+	}
+
+	interrupt.is_hw = is_hw;
+
+	writer->add_interrupt(reven_icount(), interrupt);
 }
 
 int insn_exec_callback(CPUState* cs, target_ptr_t)
