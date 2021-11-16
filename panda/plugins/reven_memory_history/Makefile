@@ -8,8 +8,9 @@ QEMU_CFLAGS := $(foreach tmp,$(QEMU_CFLAGS),$(subst -I,-isystem,$(tmp)))
 QEMU_CXXFLAGS := $(foreach tmp,$(QEMU_CXXFLAGS),$(subst -I,-isystem,$(tmp)))
 
 CFLAGS+=-O3 -msse2 -Wall -Wextra -Werror
-LIBS+=-lrvnmemhistwriter -lrvnmetadata
-LIBS+=-lmagic -lrvnbinresource -lrvnjsonresource -lrvnsqlite -lsqlite3 -lboost_filesystem -lboost_system # Needed by rvnmetadata
+LIBS+=-lrvnmemhistwriter
+LIBS+=-lrvnmetadata-common -lrvnmetadata-sql # Needed by rvnmemhistwriter
+LIBS+=-lrvnsqlite -lsqlite3 # Needed by rvnmetadata-sql
 
 QEMU_CXXFLAGS+=-std=c++14
 

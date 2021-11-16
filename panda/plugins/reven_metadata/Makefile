@@ -8,7 +8,7 @@ QEMU_CFLAGS := $(foreach tmp,$(QEMU_CFLAGS),$(subst -I,-isystem,$(tmp)))
 QEMU_CXXFLAGS := $(foreach tmp,$(QEMU_CXXFLAGS),$(subst -I,-isystem,$(tmp)))
 
 CFLAGS+=-O3 -msse2 -Wall -Wextra -Werror
-LIBS+=-L$(PLUGIN_SRC_DIR)/lib -lrvnbintrace
+LIBS+=-L$(PLUGIN_SRC_DIR)/lib
 
 QEMU_CXXFLAGS+=-std=c++14
 
