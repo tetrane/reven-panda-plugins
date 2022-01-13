@@ -201,61 +201,109 @@ bool reven_exec_rep_ongoing(void)
 
 void phys_mem_after_read_callback(CPUState*, target_ptr_t, target_ptr_t, size_t, uint8_t*)
 {
-	// Do nothing
+	try {
+		// Do nothing
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
 }
 
 void phys_mem_after_write_callback(CPUState*, target_ptr_t, target_ptr_t, size_t, uint8_t*)
 {
-	if (execution_status.status() == REVEN_EXEC_STATUS_TRANSLATING)
-		throw std::logic_error("Virtual memory writes should not happen during translation!");
+	try {
+		if (execution_status.status() == REVEN_EXEC_STATUS_TRANSLATING)
+			throw std::logic_error("Virtual memory writes should not happen during translation!");
 
-	execution_status.ensure_recording("mem write");
+		execution_status.ensure_recording("mem write");
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
 }
 
 void replay_after_dma_callback(CPUState*, const uint8_t*, hwaddr, size_t, bool is_write)
 {
-	if (is_write) {
-		execution_status.ensure_recording("dma write");
+	try {
+		if (is_write) {
+			execution_status.ensure_recording("dma write");
+		}
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
 	}
 }
 
 bool insn_translate_callback(CPUState*, target_ptr_t)
 {
-	execution_status.before_translation();
-	return true;
+	try {
+		execution_status.before_translation();
+		return true;
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
 }
 
 int insn_exec_callback(CPUState* cs, target_ptr_t)
 {
-	CPUX86State* cpu = &reinterpret_cast<X86CPU*>(cs)->env;
-	execution_status.before_new_instruction(cs->panda_guest_pc, cpu->regs[R_ECX]);
-	return 0;
+	try {
+		CPUX86State* cpu = &reinterpret_cast<X86CPU*>(cs)->env;
+		execution_status.before_new_instruction(cs->panda_guest_pc, cpu->regs[R_ECX]);
+		return 0;
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
 }
 
 void before_interrupt(CPUState* cs, int /* intno */, bool /* is_int */, int /* error_code */, target_ptr_t /* next_eip */, bool is_hw)
 {
-	// hardware interrupts cannot happen in the middle of an instruction,
-	// so we know for sure the previous instruction for which before_interrupt has been called did start
-	// and is now fully executed, and that the next instruction's callback before_interrupt has not been called:
-	// force the current instruction's start if not started already.
-	if (is_hw) {
-		execution_status.ensure_recording("hardware interrupt");
+	try {
+		// hardware interrupts cannot happen in the middle of an instruction,
+		// so we know for sure the previous instruction for which before_interrupt has been called did start
+		// and is now fully executed, and that the next instruction's callback before_interrupt has not been called:
+		// force the current instruction's start if not started already.
+		if (is_hw) {
+			execution_status.ensure_recording("hardware interrupt");
+		}
+
+		X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
+		CPUX86State *env = &cpu->env;
+
+		if (env->eip != cs->panda_guest_pc) {
+			// We know that we won't detect an instruction before the interrupt if its only doing read accesses
+			// We also know that during this callback:
+			//    - env->eip will contains the address of the next instruction to execute after the interrupt
+			//    - cs->panda_guest_pc will contains the address of the previously executed instruction
+			// So if they don't match that means that the previously executed instruction won't be resumed after the
+			// interrupt meaning that that the interrupt didn't occurred during the instruction but after it.
+			execution_status.ensure_recording("interrupt after read-only instruction");
+		}
+
+		execution_status.before_interrupt();
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
 	}
-
-	X86CPU* cpu = reinterpret_cast<X86CPU*>(cs);
-	CPUX86State *env = &cpu->env;
-
-	if (env->eip != cs->panda_guest_pc) {
-		// We know that we won't detect an instruction before the interrupt if its only doing read accesses
-		// We also know that during this callback:
-		//    - env->eip will contains the address of the next instruction to execute after the interrupt
-		//    - cs->panda_guest_pc will contains the address of the previously executed instruction
-		// So if they don't match that means that the previously executed instruction won't be resumed after the
-		// interrupt meaning that that the interrupt didn't occured during the instruction but after it.
-		execution_status.ensure_recording("interrupt after read-only instruction");
-	}
-
-	execution_status.before_interrupt();
 }
 
 void on_sigabrt(int /* signum */) {
@@ -264,41 +312,59 @@ void on_sigabrt(int /* signum */) {
 
 bool init_plugin(void* self)
 {
-	signal(SIGABRT, &on_sigabrt);
+	try {
+		signal(SIGABRT, &on_sigabrt);
 
-	/*=== panda initialization ===*/
-	panda_enable_memcb(); // enable on memory callback
+		/*=== panda initialization ===*/
+		panda_enable_memcb(); // enable on memory callback
 
-	/*=== callbacks ===*/
-	panda_cb pcb;
+		/*=== callbacks ===*/
+		panda_cb pcb;
 
-	pcb.phys_mem_after_write = phys_mem_after_write_callback;
-	panda_register_callback(self, PANDA_CB_PHYS_MEM_AFTER_WRITE, pcb);
+		pcb.phys_mem_after_write = phys_mem_after_write_callback;
+		panda_register_callback(self, PANDA_CB_PHYS_MEM_AFTER_WRITE, pcb);
 
-	pcb.phys_mem_after_read = phys_mem_after_read_callback;
-	panda_register_callback(self, PANDA_CB_PHYS_MEM_AFTER_READ, pcb);
+		pcb.phys_mem_after_read = phys_mem_after_read_callback;
+		panda_register_callback(self, PANDA_CB_PHYS_MEM_AFTER_READ, pcb);
 
-	pcb.replay_after_dma = replay_after_dma_callback;
-	panda_register_callback(self, PANDA_CB_REPLAY_AFTER_DMA, pcb);
+		pcb.replay_after_dma = replay_after_dma_callback;
+		panda_register_callback(self, PANDA_CB_REPLAY_AFTER_DMA, pcb);
 
-	pcb.insn_translate = insn_translate_callback;
-	panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb);
+		pcb.insn_translate = insn_translate_callback;
+		panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb);
 
-	pcb.insn_exec = insn_exec_callback;
-	panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb);
+		pcb.insn_exec = insn_exec_callback;
+		panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb);
 
-	pcb.before_interrupt = before_interrupt;
-	panda_register_callback(self, PANDA_CB_BEFORE_INTERRUPT, pcb);
+		pcb.before_interrupt = before_interrupt;
+		panda_register_callback(self, PANDA_CB_BEFORE_INTERRUPT, pcb);
 
-	/* get `max_icount` argument */
-	panda_arg_list *args = panda_get_args("reven_icount");
-	std::uint64_t max_icount_arg = panda_parse_uint64(args, "max_icount", std::numeric_limits<std::uint64_t>::max());
-	if (max_icount_arg != std::numeric_limits<std::uint64_t>::max()) {
-		max_icount = max_icount_arg;
+		/* get `max_icount` argument */
+		panda_arg_list *args = panda_get_args("reven_icount");
+		std::uint64_t max_icount_arg = panda_parse_uint64(args, "max_icount", std::numeric_limits<std::uint64_t>::max());
+		if (max_icount_arg != std::numeric_limits<std::uint64_t>::max()) {
+			max_icount = max_icount_arg;
+		}
+		panda_free_args(args);
+
+		return true;
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
 	}
-	panda_free_args(args);
-
-	return true;
 }
 
-void uninit_plugin(void* /* self */) {}
+void uninit_plugin(void* /* self */) {
+	try {
+		// Do nothing
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
+}

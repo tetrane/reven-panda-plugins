@@ -52,34 +52,68 @@ void save_trace_metadata(CPUState* /* cs */)
 
 bool insn_translate_callback(CPUState* /* cs */, target_ulong /* pc */)
 {
-	// Callback is necessary, otherwise panda crashes.
-	return true;
+	try {
+		// Callback is necessary, otherwise panda crashes.
+		return true;
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
 }
 
 int insn_exec_callback(CPUState* cs, target_ulong /* pc */)
 {
-	save_trace_metadata(cs);
-	exit(0);
+	try {
+		save_trace_metadata(cs);
+		exit(0);
 
-	return 0;
+		return 0;
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
 }
 
 bool init_plugin(void* self)
 {
-	plugin = self;
+	try {
+		plugin = self;
 
-	/*=== callbacks ===*/
-	panda_cb pcb;
+		/*=== callbacks ===*/
+		panda_cb pcb;
 
-	pcb.insn_exec = insn_exec_callback;
-	panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb); // called before an instruction_EVENT is executed
+		pcb.insn_exec = insn_exec_callback;
+		panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb); // called before an instruction_EVENT is executed
 
-	pcb.insn_translate = insn_translate_callback;
-	panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb); // called before an instruction_EVENT is translated
+		pcb.insn_translate = insn_translate_callback;
+		panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb); // called before an instruction_EVENT is translated
 
-	printf("Starting metadata recording...\n");
+		printf("Starting metadata recording...\n");
 
-	return true;
+		return true;
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
 }
 
-void uninit_plugin(void* /* self */) {}
+void uninit_plugin(void* /* self */) {
+	try {
+		// Do nothing
+	} catch(const std::exception &e) {
+		fprintf(stderr, "An exception occurred: %s\n", e.what());
+		exit(1);
+	} catch(...) {
+		fprintf(stderr, "An unknown exception occurred\n");
+		exit(1);
+	}
+}
